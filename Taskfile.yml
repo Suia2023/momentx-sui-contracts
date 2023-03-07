@@ -1,0 +1,27 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  build:
+    dir: ./packages/momentx
+    cmds:
+      - sui move build
+    sources:
+      - sources/**/*.move
+      - Move.toml
+  test:
+    dir: ./packages/momentx
+    cmds:
+      - sui move test
+    sources:
+      - sources/**/*.move
+      - Move.toml
+  demo:
+    deps:
+      - build
+    cmds:
+      - yarn ts-node demo/coffee_nft.ts
+    sources:
+      - demo/coffee_nft.ts
+      - .env

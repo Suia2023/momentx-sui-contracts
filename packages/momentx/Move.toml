@@ -1,0 +1,11 @@
+[package]
+name = "MomentX"
+version = "0.1.0"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework", rev = "devnet-0.27.1" }
+
+[addresses]
+std = "0x1"
+sui =  "0x2"
+momentx = "0x0"
