@@ -39,8 +39,22 @@ async function publish(): Promise<PublishResult> {
 }
 
 async function interact_with_contract(params: PublishResult) {
-  // add merchant
   const { moduleId, globalObjectId } = params;
+  // set urls
+  const setUrlTxn = await admin.executeMoveCall({
+    packageObjectId: moduleId,
+    module: 'coffee_nft',
+    function: 'set_urls',
+    typeArguments: [],
+    arguments: [
+      globalObjectId,
+      COFFEE_NFT_IMAGE_URL_INITIAL,
+      COFFEE_NFT_IMAGE_URL_REDEEMED,
+    ],
+    gasBudget,
+  });
+  console.log('setUrlTxn', JSON.stringify(setUrlTxn));
+  // add merchant
   const addMerchantTxn = await admin.executeMoveCall({
     packageObjectId: moduleId,
     module: 'coffee_nft',
@@ -64,25 +78,38 @@ async function interact_with_contract(params: PublishResult) {
       '0x' + await user.getAddress(),
       'coffee',
       'coffee NFT to redeem a cup of coffee',
-      COFFEE_NFT_IMAGE_URL_INITIAL,
     ],
     gasBudget,
   });
-  console.log('airdropTxn', JSON.stringify(airdropTxn));
-  // redeem coffee
-  const redeemTxn = await merchant.executeMoveCall({
+  console.log('airdropTxn', JSON.stringify(airdropTxn, null, 2));
+  const nftObjectId = (airdropTxn as any).effects.effects.events.filter((e: any) => e.newObject?.objectType === `${moduleId}::coffee_nft::CoffeeNFT`)[0].newObject.objectId;
+  // redeem coffee request
+  const redeemRequestTxn = await user.executeMoveCall({
     packageObjectId: moduleId,
     module: 'coffee_nft',
-    function: 'redeem',
+    function: 'redeem_request',
     typeArguments: [],
     arguments: [
       globalObjectId,
-      '0x' + await user.getAddress(),
-      COFFEE_NFT_IMAGE_URL_REDEEMED,
+      nftObjectId,
+      '0x' + await merchant.getAddress(),
     ],
     gasBudget,
   });
-  console.log('redeemTxn', JSON.stringify(redeemTxn));
+  console.log('redeemRequestTxn', JSON.stringify(redeemRequestTxn));
+  // redeem coffee confirm
+  const redeemConfirmTxn = await merchant.executeMoveCall({
+    packageObjectId: moduleId,
+    module: 'coffee_nft',
+    function: 'redeem_confirm',
+    typeArguments: [],
+    arguments: [
+      globalObjectId,
+      nftObjectId,
+    ],
+    gasBudget,
+  });
+  console.log('redeemConfirmTxn', JSON.stringify(redeemConfirmTxn));
 }
 
 async function queries(moduleId: string, globalConfigId: string) {
@@ -92,13 +119,16 @@ async function queries(moduleId: string, globalConfigId: string) {
   const merchants = (globalObject.details as any).data.fields.merchants.fields.contents;
   console.log('merchants', JSON.stringify(merchants, null, 2));
   // list all coffee NFTs
-  const coffeeTableId = (globalObject.details as any).data.fields.CoffeeNFTs.fields.id.id;
+  const coffeeTableId = (globalObject.details as any).data.fields.nfts.fields.id.id;
   let cursor = null;
+  const hexRegex = /(0x[a-fA-F\d]{40})/;
   while (true) {
     const coffeeNFTs: any = await provider.getDynamicFields(coffeeTableId, cursor);
     console.log('coffeeNFTs', JSON.stringify(coffeeNFTs, null, 2));
     for (const nft of coffeeNFTs.data) {
-      const nftObject = await provider.getObject(nft.objectId);
+      console.log(nft.name);
+      const objectId = nft.name.match(hexRegex)[1];
+      const nftObject = await provider.getObject(objectId);
       console.log('nftObject', JSON.stringify(nftObject, null, 2));
     }
     if (coffeeNFTs.nextCursor === null) {
@@ -109,8 +139,9 @@ async function queries(moduleId: string, globalConfigId: string) {
   }
   // get coffee NFT by user address
   const userAddr = '0x' + await user.getAddress();
-  const coffeeNFTByUser = await provider.getDynamicFieldObject(coffeeTableId, userAddr);
-  console.log('coffeeNFTByUser', JSON.stringify(coffeeNFTByUser, null, 2));
+  const userObjects = await provider.getObjectsOwnedByAddress(userAddr);
+  const coffeeNFTsByUser = userObjects.filter(o => o.type === `${moduleId}::coffee_nft::CoffeeNFT`)
+  console.log('coffeeNFTsByUser', JSON.stringify(coffeeNFTsByUser, null, 2));
 }
 
 async function main() {
@@ -119,15 +150,23 @@ async function main() {
   console.log(`admin address: 0x${adminAddr}`);
   const merchantAddr = await merchant.getAddress();
   console.log(`merchant address: 0x${merchantAddr}`);
+  const userAddr = await user.getAddress();
+  console.log(`user address: 0x${userAddr}`)
   if (connection.faucet) {
     const res = await provider.requestSuiFromFaucet(adminAddr);
     console.log('requestSuiFromFaucet', JSON.stringify(res, null, 2));
     const res2 = await provider.requestSuiFromFaucet(merchantAddr);
     console.log('requestSuiFromFaucet', JSON.stringify(res2, null, 2));
+    const res3 = await provider.requestSuiFromFaucet(userAddr);
+    console.log('requestSuiFromFaucet', JSON.stringify(res3, null, 2));
   }
 
   const publishResult = await publish();
   console.log(`PublishResult: ${JSON.stringify(publishResult, null, 2)}`);
+  // const publishResult = {
+  //   "moduleId": "0x9f1ab9d663cc99f43ed86ab242dc2b781d68a264",
+  //   "globalObjectId": "0xc7f2b9a4dd4fea4d6e6d53b4e48922bd2766686b"
+  // }
   await interact_with_contract(publishResult);
   const { moduleId, globalObjectId } = publishResult;
   await queries(moduleId, globalObjectId);
