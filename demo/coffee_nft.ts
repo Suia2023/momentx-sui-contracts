@@ -67,6 +67,19 @@ async function interact_with_contract(params: PublishResult) {
     gasBudget,
   });
   console.log('addMerchantTxn', JSON.stringify(addMerchantTxn));
+  // set stock
+  const setStockTxn = await merchant.executeMoveCall({
+    packageObjectId: moduleId,
+    module: 'coffee_nft',
+    function: 'set_stock',
+    typeArguments: [],
+    arguments: [
+      globalObjectId,
+      "100",
+    ],
+    gasBudget,
+  });
+  console.log('setStockTxn', JSON.stringify(setStockTxn));
   // airdrop coffee
   const airdropTxn = await admin.executeMoveCall({
     packageObjectId: moduleId,
@@ -84,7 +97,7 @@ async function interact_with_contract(params: PublishResult) {
   console.log('airdropTxn', JSON.stringify(airdropTxn, null, 2));
   const nftObjectId = (airdropTxn as any).effects.effects.events.filter((e: any) => e.newObject?.objectType === `${moduleId}::coffee_nft::CoffeeNFT`)[0].newObject.objectId;
   // redeem coffee request
-  const redeemRequestTxn = await user.executeMoveCall({
+  const redeemRequestTxn = await merchant.executeMoveCall({
     packageObjectId: moduleId,
     module: 'coffee_nft',
     function: 'redeem_request',
@@ -92,13 +105,12 @@ async function interact_with_contract(params: PublishResult) {
     arguments: [
       globalObjectId,
       nftObjectId,
-      '0x' + await merchant.getAddress(),
     ],
     gasBudget,
   });
   console.log('redeemRequestTxn', JSON.stringify(redeemRequestTxn));
   // redeem coffee confirm
-  const redeemConfirmTxn = await merchant.executeMoveCall({
+  const redeemConfirmTxn = await user.executeMoveCall({
     packageObjectId: moduleId,
     module: 'coffee_nft',
     function: 'redeem_confirm',
@@ -106,6 +118,7 @@ async function interact_with_contract(params: PublishResult) {
     arguments: [
       globalObjectId,
       nftObjectId,
+      '0x' + await merchant.getAddress(),
     ],
     gasBudget,
   });
